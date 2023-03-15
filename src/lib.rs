@@ -63,13 +63,14 @@ impl <L: LabelType, V, F: FeatureType> Classifier<V,L> for NaiveBayes<L,V,F> {
                 let label_total = *label_total + 1;
                 if let Some(fcounts) = self.feature_counts.get(&feature) {
                     let count = fcounts.count(label) + 1;
-                    (*label_probs.get_mut(label).unwrap()) *= count as f64 / label_total as f64;
+                    (*label_probs.get_mut(label).unwrap()) *= count as f64 / label_total as f64 * self.p_label(label);
                 }
             }
         }
 
         let mut rankings = label_probs.iter().map(|(label, prob)| (*prob, (*label).clone())).collect::<Vec<_>>();
         rankings.sort_by(cmp_w_label);
+        println!("{rankings:?}");
         rankings.last().unwrap().1.clone()
     }
 }
@@ -118,12 +119,23 @@ mod tests {
         ];
 
         let testing = vec![
+            // P('A') = 9/20 * 9/20, P('B') = 4/15 * 2/15
             ('A', vec![('X', 5), ('Y', 2)]),
+
+            // P('A') = 3/20 * 9/20, P('B') = 4/15 * 2/15
             ('A', vec![('X', 4), ('Y', 2)]),
+
+            // P('A') = 3/20, P('B') = 4/15
             ('B', vec![('X', 4), ('Y', 1)]),
+
+            // P('A') = 9/20, P('B') = 4/15
             ('A', vec![('X', 5), ('Y', 1)]),
-            ('A', vec![('X', 3), ('Y', 3)]),
+
+            // P('A') = 3/20, P('B') = 4/15
             ('B', vec![('X', 2), ('Y', 3)]),
+
+            // P('A') = 6/20 * 3/20, P('B') = 2/15 * 4/15
+            ('A', vec![('X', 3), ('Y', 3)]),
         ];
 
         let mut nb = NaiveBayes::new(Arc::new(|example: &Vec<(char, i32)>| example.clone()));
