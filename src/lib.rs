@@ -56,30 +56,19 @@ impl <L: LabelType, V, F: FeatureType> Classifier<V,L> for NaiveBayes<L,V,F> {
         }
     }
 
-    // This is not correct.
     fn classify(&self, example: &V) -> L {
-        let mut rankings = vec![];
+        let mut label_probs = self.label_counts.iter().map(|(label,_)| (label, 1.0)).collect::<BTreeMap<_,_>>();
         for feature in (self.extractor)(example) {
-            let mut product = 1.0;
-            for (label, count) in self.label_counts.iter() {
-
-            }
-        }
-
-        // Original (bad) version below.
-
-        let mut counts = BTreeHistogram::new();
-        for feature in (self.extractor)(example) {
-            if let Some(fcounts) = self.feature_counts.get(&feature) {
-                for (label, count) in fcounts.iter() {
-                    counts.bump_by(label, *count);
+            for (label, label_total) in self.label_counts.iter() {
+                let label_total = *label_total + 1;
+                if let Some(fcounts) = self.feature_counts.get(&feature) {
+                    let count = fcounts.count(label) + 1;
+                    (*label_probs.get_mut(label).unwrap()) *= count as f64 / label_total as f64;
                 }
             }
         }
-        let mut rankings = vec![];
-        for (label, count) in self.label_counts.iter() {
-            rankings.push((counts.count(label) as f64 / *count as f64, label.clone()));
-        }
+
+        let mut rankings = label_probs.iter().map(|(label, prob)| (*prob, (*label).clone())).collect::<Vec<_>>();
         rankings.sort_by(cmp_w_label);
         rankings.last().unwrap().1.clone()
     }
@@ -142,6 +131,7 @@ mod tests {
 
         for (label, example) in testing.iter() {
             let result = nb.classify(example);
+            println!("{label} {example:?} ? {result}");
             assert_eq!(result, *label);
         }
     }
