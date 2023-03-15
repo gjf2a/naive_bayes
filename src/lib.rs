@@ -58,6 +58,16 @@ impl <L: LabelType, V, F: FeatureType> Classifier<V,L> for NaiveBayes<L,V,F> {
 
     // This is not correct.
     fn classify(&self, example: &V) -> L {
+        let mut rankings = vec![];
+        for feature in (self.extractor)(example) {
+            let mut product = 1.0;
+            for (label, count) in self.label_counts.iter() {
+
+            }
+        }
+
+        // Original (bad) version below.
+
         let mut counts = BTreeHistogram::new();
         for feature in (self.extractor)(example) {
             if let Some(fcounts) = self.feature_counts.get(&feature) {
