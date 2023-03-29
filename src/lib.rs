@@ -13,7 +13,7 @@
 //! matter.
 //! 
 
-use std::{sync::Arc, hash::Hash, collections::{HashMap, BTreeSet, BTreeMap, btree_map::Iter}, cmp::Ordering};
+use std::{hash::Hash, collections::{HashMap, BTreeSet, BTreeMap, btree_map::Iter}, cmp::Ordering};
 
 use supervised_learning::Classifier;
 use hash_histogram::{HashHistogram, KeyType};
@@ -27,14 +27,21 @@ trait_set! {
     pub trait FeatureType = Hash + Clone + Eq + PartialEq;
 }
 
-pub struct NaiveBayes<L: LabelType, V, F: FeatureType> {
-    extractor: Arc<fn(&V)->Vec<F>>,
+pub trait NaiveBayesExtractor {
+    type InputValue;
+    type Feature: FeatureType;
+
+    fn extract(&self, value: &Self::InputValue) -> Vec<Self::Feature>;
+}
+
+pub struct NaiveBayes<L: LabelType, V, F: FeatureType, E:NaiveBayesExtractor<InputValue=V, Feature=F>> {
+    extractor: E,
     label_counts: BTreeHistogram<L>,
     feature_counts: HashMap<F,HashHistogram<L>>
 }
 
-impl <L: LabelType, V, F: FeatureType> NaiveBayes<L,V,F> {
-    pub fn new(extractor: Arc<fn(&V)->Vec<F>>) -> Self {
+impl <L: LabelType, V, F: FeatureType, E:NaiveBayesExtractor<InputValue=V, Feature=F>> NaiveBayes<L,V,F,E> {
+    pub fn new(extractor: E) -> Self {
         Self { extractor, label_counts: BTreeHistogram::new(), feature_counts: HashMap::new()}
     }
 
@@ -43,11 +50,11 @@ impl <L: LabelType, V, F: FeatureType> NaiveBayes<L,V,F> {
     }
 }
 
-impl <L: LabelType, V, F: FeatureType> Classifier<V,L> for NaiveBayes<L,V,F> {
+impl <L: LabelType, V, F: FeatureType, E:NaiveBayesExtractor<InputValue=V, Feature=F>> Classifier<V,L> for NaiveBayes<L,V,F,E> {
     fn train(&mut self, training_images: &Vec<(L,V)>) {
         for (label, value) in training_images.iter() {
             self.label_counts.bump(label);
-            for feature in (self.extractor)(value) {
+            for feature in self.extractor.extract(value) {
                 if !self.feature_counts.contains_key(&feature) {
                     self.feature_counts.insert(feature.clone(), HashHistogram::new());
                 }
@@ -58,7 +65,7 @@ impl <L: LabelType, V, F: FeatureType> Classifier<V,L> for NaiveBayes<L,V,F> {
 
     fn classify(&self, example: &V) -> L {
         let mut label_probs = self.label_counts.iter().map(|(label,_)| (label, 1.0)).collect::<BTreeMap<_,_>>();
-        for feature in (self.extractor)(example) {
+        for feature in self.extractor.extract(example) {
             for (label, label_total) in self.label_counts.iter() {
                 let label_total = *label_total + 1;
                 if let Some(fcounts) = self.feature_counts.get(&feature) {
@@ -92,6 +99,18 @@ fn cmp_f64<M: Copy + PartialEq + PartialOrd>(a: &M, b: &M) -> Ordering {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Extractor {}
+
+    impl NaiveBayesExtractor for Extractor {
+        type InputValue = Vec<(char, i32)>;
+
+        type Feature = (char, i32);
+
+        fn extract(&self, value: &Self::InputValue) -> Vec<Self::Feature> {
+            value.clone()
+        }
+    }
 
     #[test]
     fn it_works() {
@@ -138,7 +157,7 @@ mod tests {
             ('A', vec![('X', 3), ('Y', 3)]),
         ];
 
-        let mut nb = NaiveBayes::new(Arc::new(|example: &Vec<(char, i32)>| example.clone()));
+        let mut nb = NaiveBayes::new(Extractor {});
         nb.train(&training);
 
         for (label, example) in testing.iter() {
